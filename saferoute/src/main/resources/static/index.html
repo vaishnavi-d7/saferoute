@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeRoute - Real-Time Safety Monitoring</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Tailwind CSS (for UI Styling) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        #map {
+            height: calc(100vh - 80px);
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white font-sans flex flex-col h-screen">
+
+    <!-- Top Navigation Header -->
+    <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shadow-md">
+        <div class="flex items-center space-x-3">
+            <div class="w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
+            <h1 class="text-xl font-bold tracking-wide">SafeRoute Real-Time Monitoring</h1>
+        </div>
+        <div id="status-badge" class="text-xs px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 font-medium">
+            Connecting WebSocket...
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="flex-1 relative">
+        <div id="map"></div>
+
+        <!-- Floating Controls Panel -->
+        <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[1000] bg-slate-800/90 backdrop-blur-md p-4 rounded-xl border border-slate-700 shadow-2xl flex items-center space-x-4">
+            <button onclick="sendTestHazard()" class="px-5 py-2.5 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center space-x-2">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <span>Broadcast Test Hazard</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- SockJS & STOMP Client Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+    <script>
+        // Initialize Map centered at Bengaluru
+        var map = L.map('map').setView([12.9716, 77.5946], 13);
+
+        // Load OpenStreetMap Tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        var stompClient = null;
+
+        // Establish WebSocket Connection
+        function connectWebSocket() {
+            var socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+
+            // Optional: Disable excessive STOMP console logs
+            // stompClient.debug = null;
+
+            stompClient.connect({}, function (frame) {
+                console.log('STOMP Connected: ' + frame);
+                
+                // Update UI Status
+                const badge = document.getElementById('status-badge');
+                badge.innerText = "WebSocket: Connected (Live)";
+                badge.className = "text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium";
+
+                // Subscribe to real-time hazard alerts topic
+                stompClient.subscribe('/topic/alerts', function (message) {
+                    const data = JSON.parse(message.body);
+                    console.log("Real-Time Broadcast Received:", data);
+                    
+                    renderHazardMarker(data);
+                });
+            }, function (error) {
+                console.error("STOMP Error: ", error);
+                const badge = document.getElementById('status-badge');
+                badge.innerText = "WebSocket: Disconnected";
+                badge.className = "text-xs px-3 py-1 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 font-medium";
+            });
+        }
+
+        // Render Marker safely handling potential null/missing backend fields
+        function renderHazardMarker(data) {
+            // Safe coordinate resolution
+            let lat = data.latitude || (data.location ? data.location.lat : null) || 12.9709;
+            let lng = data.longitude || (data.location ? data.location.lng : null) || 77.6003;
+
+            if (lat && lng) {
+                // Create map marker
+                var marker = L.marker([lat, lng]).addTo(map);
+                
+                // Bind detail popup
+                var popupContent = `
+                    <div style="color: #1e293b; font-family: sans-serif;">
+                        <h3 style="margin:0 0 4px 0; font-weight: bold; color: #dc2626;">🚨 ${data.type || 'Hazard Alert'}</h3>
+                        <p style="margin:0; font-size: 13px;"><b>Severity:</b> ${data.severity || 'High'}</p>
+                        <p style="margin:2px 0 0 0; font-size: 11px; color: #64748b;">ID: ${data.id || 'N/A'}</p>
+                    </div>
+                `;
+                
+                marker.bindPopup(popupContent).openPopup();
+                map.panTo([lat, lng]);
+            } else {
+                console.error("Could not render marker. Invalid LatLng:", data);
+            }
+        }
+
+        // Send Test Hazard Event to Spring Boot Backend
+        function sendTestHazard() {
+            if (stompClient && stompClient.connected) {
+                const payload = {
+                    latitude: 12.970903434400803,
+                    longitude: 77.60036396149879,
+                    type: "Road Risk",
+                    severity: "5"
+                };
+
+                stompClient.send("/app/report-incident", {}, JSON.stringify(payload));
+                console.log("Sent Hazard Event:", payload);
+            } else {
+                alert("WebSocket is not connected yet!");
+            }
+        }
+
+        // Auto-connect when page loads
+        window.onload = connectWebSocket;
+    </script>
+</body>
+</html>

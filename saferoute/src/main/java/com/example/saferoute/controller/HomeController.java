@@ -13,11 +13,6 @@ public class HomeController {
     @Autowired
     private LocationRepository locationRepository;
 
-    @GetMapping("/")
-    public String home() {
-        return "Welcome to SafeRoute! 🛡️ Your safety-first route recommender is running.";
-    }
-
     // CREATE - Add a new location
     @PostMapping("/locations")
     public Location addLocation(@RequestBody Location location) {
