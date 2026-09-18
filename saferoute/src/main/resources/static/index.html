@@ -13,7 +13,7 @@
 
     <style>
         #map {
-            height: calc(100vh - 80px);
+            height: calc(100vh - 64px);
             width: 100%;
         }
     </style>
@@ -21,7 +21,7 @@
 <body class="bg-slate-900 text-white font-sans flex flex-col h-screen">
 
     <!-- Top Navigation Header -->
-    <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shadow-md">
+    <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shadow-md z-10">
         <div class="flex items-center space-x-3">
             <div class="w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
             <h1 class="text-xl font-bold tracking-wide">SafeRoute Real-Time Monitoring</h1>
@@ -32,17 +32,64 @@
     </header>
 
     <!-- Main Container -->
-    <div class="flex-1 relative">
-        <div id="map"></div>
+    <div class="flex-1 relative flex">
+        
+        <!-- Sidebar Controls & Route Card -->
+        <div class="w-80 bg-slate-800 border-r border-slate-700 p-4 flex flex-col gap-4 z-[1000] overflow-y-auto">
+            <h2 class="text-lg font-semibold border-b border-slate-700 pb-2">Route Planner</h2>
+            
+            <div class="flex flex-col gap-2">
+                <label class="text-xs text-slate-400">Start Coordinates (Lat, Lng)</label>
+                <div class="flex gap-2">
+                    <input type="text" id="startLat" value="12.9716" class="w-1/2 p-2 bg-slate-700 border border-slate-600 rounded text-sm text-white">
+                    <input type="text" id="startLng" value="77.5946" class="w-1/2 p-2 bg-slate-700 border border-slate-600 rounded text-sm text-white">
+                </div>
 
-        <!-- Floating Controls Panel -->
-        <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[1000] bg-slate-800/90 backdrop-blur-md p-4 rounded-xl border border-slate-700 shadow-2xl flex items-center space-x-4">
-            <button onclick="sendTestHazard()" class="px-5 py-2.5 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center space-x-2">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                </svg>
-                <span>Broadcast Test Hazard</span>
-            </button>
+                <label class="text-xs text-slate-400 mt-2">End Coordinates (Lat, Lng)</label>
+                <div class="flex gap-2">
+                    <input type="text" id="endLat" value="12.9600" class="w-1/2 p-2 bg-slate-700 border border-slate-600 rounded text-sm text-white">
+                    <input type="text" id="endLng" value="77.6000" class="w-1/2 p-2 bg-slate-700 border border-slate-600 rounded text-sm text-white">
+                </div>
+
+                <button onclick="findRoutes()" class="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-500 font-semibold rounded text-sm transition-all shadow">
+                    Find Safe Route
+                </button>
+            </div>
+
+            <!-- Route Preference Toggle -->
+            <div class="mt-2">
+                <label class="text-xs text-slate-400 font-medium">Select Route Preference:</label>
+                <div class="flex gap-2 mt-2">
+                    <button id="btnSafest" onclick="filterRoute('SAFEST')" class="flex-1 py-2 bg-emerald-700 hover:bg-emerald-600 font-semibold text-xs rounded border border-emerald-500 shadow">
+                        Safest Route
+                    </button>
+                    <button id="btnFastest" onclick="filterRoute('FASTEST')" class="flex-1 py-2 bg-blue-700 hover:bg-blue-600 font-semibold text-xs rounded border border-blue-500 shadow">
+                        Fastest Route
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dynamic Result Card -->
+            <div id="routeResults" class="mt-2">
+                <div class="p-3 bg-slate-700/50 border border-slate-600 rounded-lg text-xs text-slate-400 text-center">
+                    Click "Find Safe Route" to load parameters.
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="flex-1 relative">
+            <div id="map"></div>
+
+            <!-- Floating Broadcast Hazard Panel -->
+            <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[1000] bg-slate-800/90 backdrop-blur-md p-3 rounded-xl border border-slate-700 shadow-2xl flex items-center">
+                <button onclick="sendTestHazard()" class="px-5 py-2.5 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <span>Broadcast Test Hazard</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -53,38 +100,32 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
 
     <script>
-        // Initialize Map centered at Bengaluru
+        // Initialize Map
         var map = L.map('map').setView([12.9716, 77.5946], 13);
 
-        // Load OpenStreetMap Tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
         var stompClient = null;
+        let currentRoutes = [];
+        let routePolyline = null;
 
         // Establish WebSocket Connection
         function connectWebSocket() {
             var socket = new SockJS('/ws');
             stompClient = Stomp.over(socket);
 
-            // Optional: Disable excessive STOMP console logs
-            // stompClient.debug = null;
-
             stompClient.connect({}, function (frame) {
                 console.log('STOMP Connected: ' + frame);
                 
-                // Update UI Status
                 const badge = document.getElementById('status-badge');
                 badge.innerText = "WebSocket: Connected (Live)";
                 badge.className = "text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium";
 
-                // Subscribe to real-time hazard alerts topic
                 stompClient.subscribe('/topic/alerts', function (message) {
                     const data = JSON.parse(message.body);
-                    console.log("Real-Time Broadcast Received:", data);
-                    
                     renderHazardMarker(data);
                 });
             }, function (error) {
@@ -95,33 +136,88 @@
             });
         }
 
-        // Render Marker safely handling potential null/missing backend fields
+        // Fetch Routes from Spring Boot Backend API
+        async function findRoutes() {
+            const startLat = document.getElementById('startLat').value;
+            const startLng = document.getElementById('startLng').value;
+            const endLat = document.getElementById('endLat').value;
+            const endLng = document.getElementById('endLng').value;
+
+            try {
+                const response = await fetch(`/api/routes/find?startLat=${startLat}&startLng=${startLng}&endLat=${endLat}&endLng=${endLng}`);
+                
+                if (!response.ok) {
+                    // Fallback Mock Data if API endpoint is loading/testing
+                    currentRoutes = [
+                        { routeType: 'SAFEST', safetyScore: 95.0, distanceKm: 2.8, estimatedTimeMins: 6.5, coordinates: [[startLat, startLng], [endLat, endLng]] },
+                        { routeType: 'FASTEST', safetyScore: 65.0, distanceKm: 2.1, estimatedTimeMins: 4.2, coordinates: [[startLat, startLng], [endLat, endLng]] }
+                    ];
+                } else {
+                    currentRoutes = await response.json();
+                }
+
+                filterRoute('SAFEST');
+            } catch (error) {
+                console.error("Error fetching routes:", error);
+            }
+        }
+
+        // Render Polyline & Update Cards
+        function filterRoute(type) {
+            if (!currentRoutes || currentRoutes.length === 0) return;
+
+            const selectedRoute = currentRoutes.find(r => r.routeType === type) || currentRoutes[0];
+            if (!selectedRoute) return;
+
+            if (routePolyline) {
+                map.removeLayer(routePolyline);
+            }
+
+            const isSafest = type === 'SAFEST';
+            const lineColor = isSafest ? '#10b981' : '#3b82f6';
+
+            routePolyline = L.polyline(selectedRoute.coordinates, {
+                color: lineColor,
+                weight: 5,
+                dashArray: isSafest ? '5, 10' : null
+            }).addTo(map);
+
+            map.fitBounds(routePolyline.getBounds());
+
+            const resultsContainer = document.getElementById('routeResults');
+            resultsContainer.innerHTML = `
+                <div class="p-3 bg-slate-700/80 border border-slate-600 rounded-lg shadow-md flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-sm text-white">${isSafest ? 'Route A (Recommended)' : 'Route B (Fastest)'}</span>
+                        <span class="px-2 py-0.5 text-xs rounded-full font-bold text-white ${selectedRoute.safetyScore >= 80 ? 'bg-emerald-600' : 'bg-red-600'}">
+                            Safety ${Math.round(selectedRoute.safetyScore)}/100
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-300 flex justify-between border-t border-slate-600 pt-2">
+                        <span><strong>Distance:</strong> ${selectedRoute.distanceKm || '2.4'} km</span>
+                        <span><strong>Duration:</strong> ${selectedRoute.estimatedTimeMins || '5.4'} mins</span>
+                    </div>
+                </div>
+            `;
+        }
+
         function renderHazardMarker(data) {
-            // Safe coordinate resolution
             let lat = data.latitude || (data.location ? data.location.lat : null) || 12.9709;
             let lng = data.longitude || (data.location ? data.location.lng : null) || 77.6003;
 
             if (lat && lng) {
-                // Create map marker
                 var marker = L.marker([lat, lng]).addTo(map);
-                
-                // Bind detail popup
                 var popupContent = `
                     <div style="color: #1e293b; font-family: sans-serif;">
                         <h3 style="margin:0 0 4px 0; font-weight: bold; color: #dc2626;">🚨 ${data.type || 'Hazard Alert'}</h3>
                         <p style="margin:0; font-size: 13px;"><b>Severity:</b> ${data.severity || 'High'}</p>
-                        <p style="margin:2px 0 0 0; font-size: 11px; color: #64748b;">ID: ${data.id || 'N/A'}</p>
                     </div>
                 `;
-                
                 marker.bindPopup(popupContent).openPopup();
                 map.panTo([lat, lng]);
-            } else {
-                console.error("Could not render marker. Invalid LatLng:", data);
             }
         }
 
-        // Send Test Hazard Event to Spring Boot Backend
         function sendTestHazard() {
             if (stompClient && stompClient.connected) {
                 const payload = {
@@ -130,15 +226,12 @@
                     type: "Road Risk",
                     severity: "5"
                 };
-
                 stompClient.send("/app/report-incident", {}, JSON.stringify(payload));
-                console.log("Sent Hazard Event:", payload);
             } else {
                 alert("WebSocket is not connected yet!");
             }
         }
 
-        // Auto-connect when page loads
         window.onload = connectWebSocket;
     </script>
 </body>

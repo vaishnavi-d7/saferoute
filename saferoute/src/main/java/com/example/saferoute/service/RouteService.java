@@ -1,74 +1,74 @@
 package com.example.saferoute.service;
 
-import com.example.saferoute.model.RouteDTO;
-import org.springframework.beans.factory.annotation.Value;
+import com.example.saferoute.model.Incident;
+import com.example.saferoute.repository.IncidentRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class RouteService {
 
-    @Value("${openrouteservice.api.key:dummy_key}")
-    private String apiKey;
+    private final IncidentRepository incidentRepository;
 
-    private final SafetyCalculatorService safetyCalculatorService;
-    private final RestTemplate restTemplate = new RestTemplate();
-
-    public RouteService(SafetyCalculatorService safetyCalculatorService) {
-        this.safetyCalculatorService = safetyCalculatorService;
+    public RouteService(IncidentRepository incidentRepository) {
+        this.incidentRepository = incidentRepository;
     }
 
-    @SuppressWarnings("unchecked")
-    public List<RouteDTO> getRealRoutes(String start, String end) {
-        try {
-            String url = String.format(
-                "https://api.openrouteservice.org/v2/directions/driving-car?api_key=%s&start=%s&end=%s",
-                apiKey, start, end
-            );
+    // Calculate Safety Score based on nearby incidents
+    public double calculateSafetyScore(List<double[]> pathCoordinates) {
+        // Fix 1: Retrieve all incidents from database
+        List<Incident> incidents = incidentRepository.findAll();
+        int totalRiskPoints = 0;
 
-            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
-            if (response == null || !response.containsKey("features")) {
-                return getFallbackRoutes();
+        for (double[] point : pathCoordinates) {
+            double lat = point[0];
+            double lng = point[1];
+
+            for (Incident incident : incidents) {
+                double distance = haversineDistance(lat, lng, incident.getLatitude(), incident.getLongitude());
+                
+                // If incident is within 500 meters (0.5 km) radius
+                if (distance < 0.5) {
+                    // Fix 2: Safely convert severity to integer weight
+                    int severityWeight = getSeverityWeight(incident.getSeverity());
+                    totalRiskPoints += severityWeight * 10;
+                }
             }
+        }
 
-            List<Map<String, Object>> features = (List<Map<String, Object>>) response.get("features");
-            List<RouteDTO> routeList = new ArrayList<>();
+        // Deduct risk from base score of 100
+        double finalScore = 100 - totalRiskPoints;
+        return Math.max(finalScore, 10.0); // Minimum safety floor
+    }
 
-            for (int i = 0; i < features.size(); i++) {
-                Map<String, Object> properties = (Map<String, Object>) features.get(i).get("properties");
-                Map<String, Object> summary = (Map<String, Object>) properties.get("summary");
-
-                double distanceMeters = ((Number) summary.get("distance")).doubleValue();
-                double durationSeconds = ((Number) summary.get("duration")).doubleValue();
-
-                double distanceKm = Math.round((distanceMeters / 1000.0) * 10.0) / 10.0;
-                double durationMin = Math.round((durationSeconds / 60.0) * 10.0) / 10.0;
-
-                // Dynamic safety score from our DB algorithm
-                int calculatedScore = safetyCalculatorService.calculateSafetyScore(distanceKm, durationMin) - (i * 10);
-                int finalScore = Math.max(0, Math.min(100, calculatedScore));
-
-                String routeLabel = (i == 0) ? "Route A (Recommended)" : "Route " + (char)('A' + i) + " (Alternative)";
-                routeList.add(new RouteDTO(routeLabel, distanceKm, durationMin, finalScore));
-            }
-
-            return routeList.isEmpty() ? getFallbackRoutes() : routeList;
-
-        } catch (Exception e) {
-            System.err.println("Map API Call Error: " + e.getMessage() + ". Using fallback routes.");
-            return getFallbackRoutes();
+    // Convert Severity String/Int to numerical weight safely
+    private int getSeverityWeight(Object severity) {
+        if (severity == null) return 1;
+        
+        String sevStr = String.valueOf(severity).toUpperCase();
+        switch (sevStr) {
+            case "HIGH":
+            case "3":
+                return 3;
+            case "MEDIUM":
+            case "2":
+                return 2;
+            case "LOW":
+            case "1":
+            default:
+                return 1;
         }
     }
 
-    private List<RouteDTO> getFallbackRoutes() {
-        int score = safetyCalculatorService.calculateSafetyScore(2.4, 5.4);
-        return List.of(
-            new RouteDTO("Route A (Recommended)", 2.4, 5.4, score),
-            new RouteDTO("Route B (Alternative)", 3.1, 7.0, Math.max(0, score - 15))
-        );
+    // Haversine formula for distance calculation in KM
+    private double haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+        double R = 6371; // Earth radius in km
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                   Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                   Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 }

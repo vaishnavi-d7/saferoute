@@ -3,49 +3,40 @@ package com.example.saferoute.model;
 import jakarta.persistence.*;
 
 @Entity
+@Table(name = "incident")
 public class Incident {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String type;        // e.g. "Poor Lighting", "Accident", "Theft"
-    private String severity;    // e.g. "Low", "Medium", "High"
+    private String description;
+    private double latitude;
+    private double longitude;
+    private String severity; // e.g., "HIGH", "MEDIUM", "LOW"
 
-    @ManyToOne
-    @JoinColumn(name = "location_id")
-    private Location location;
+    public Incident() {}
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public String getSeverity() {
-        return severity;
-    }
-
-    public void setSeverity(String severity) {
+    public Incident(String description, double latitude, double longitude, String severity) {
+        this.description = description;
+        this.latitude = latitude;
+        this.longitude = longitude;
         this.severity = severity;
     }
 
-    public Location getLocation() {
-        return location;
-    }
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setLocation(Location location) {
-        this.location = location;
-    }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    public double getLatitude() { return latitude; }
+    public void setLatitude(double latitude) { this.latitude = latitude; }
+
+    public double getLongitude() { return longitude; }
+    public void setLongitude(double longitude) { this.longitude = longitude; }
+
+    public String getSeverity() { return severity; }
+    public void setSeverity(String severity) { this.severity = severity; }
 }
